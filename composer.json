@@ -1,0 +1,49 @@
+{
+    "name": "tlsgroup/laravel-referral",
+    "description": "Laravel package for a referral system",
+    "keywords": [
+        "laravel",
+        "referral",
+        "affiliate",
+        "package",
+        "laravel-referral",
+        "referral-system",
+        "user-referral"
+    ],
+    "homepage": "https://github.com/TLSGROUP/laravel-referral",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Khokhlov Ruslan",
+            "email": "vedexpert@live.ru"
+        }
+    ],
+    "require": {
+        "php": ">=8.2.0",
+        "illuminate/database": "^8.0|^9.0|^10.0|^11.0",
+        "illuminate/auth": "^8.0|^9.0|^10.0|^11.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "autoload": {
+        "psr-4": {
+            "TLSGROUP\\LaravelReferral\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "TLSGROUP\\LaravelReferral\\Tests\\": "tests"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "TLSGROUP\\LaravelReferral\\Providers\\ReferralServiceProvider"
+            ]
+        }
+    }
+}
