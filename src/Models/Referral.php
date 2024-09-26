@@ -2,53 +2,86 @@
 
 namespace TLSGROUP\LaravelReferral\Models;
 
+use App\Models\User; // Мы можем использовать модель User напрямую
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\App;
 use Illuminate\Database\Eloquent\Model;
 
 class Referral extends Model
 {
     /**
-     * The attributes that are mass assignable.
+     * Атрибуты, которые могут быть назначены.
      *
      * @var array
      */
     protected $fillable = [
-        'user_id', 'referral_code', 'referrer_id'
+        'user_id', 'referral_code', 'referrer_id', 'level'
     ];
-
     /**
-     * Get the user associated with the referral.
+     * Получить пользователя, связанного с этим рефералом.
      *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     * @return BelongsTo
      */
-    public function user()
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(config('referral.user_model'), 'user_id');
+        return $this->belongsTo(User::class, 'user_id');
     }
-
     /**
-     * Get the referrer associated with the referral.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     * Проверить, есть ли у пользователя свободные места на текущем уровне.
+     * Пользователь может иметь максимум 25 рефералов на одном уровне.
      */
-    public function referrer()
+    public static function hasAvailableSlot($userId, $level)
     {
-        return $this->belongsTo(config('referral.user_model'), 'referrer_id');
+        $referralsCount = self::where('referrer_id', $userId)->where('level', $level)->count();
+        return $referralsCount < 25;  // Максимум 25 рефералов на уровне
     }
-
     /**
-     * Retrieve the user by referral code.
+     * Найти доступный слот для нового реферала (слева направо) на уровне.
+     */
+    public static function findAvailableSlot($referrerId, $level)
+    {
+        // Проверяем текущего пригласившего
+        if (self::hasAvailableSlot($referrerId, $level)) {
+            return $referrerId;
+        }
+
+        // Ищем рефералов на предыдущем уровне, чтобы найти доступный слот для нового реферала
+        $referrals = self::where('referrer_id', $referrerId)->where('level', $level)->get();
+
+        // Проверяем рефералов на данном уровне
+        foreach ($referrals as $referral) {
+            if (self::hasAvailableSlot($referral->user_id, $level + 1)) {
+                return $referral->user_id; // Возвращаем ID реферала, у которого есть свободный слот
+            }
+        }
+
+        return null; // Если нет доступных слотов
+    }
+    /**
+     * Получить пригласившего пользователя (реферера).
      *
-     * @param  string  $code
+     * @return BelongsTo
+     */
+    public function referrer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'referrer_id');
+    }
+    /**
+     * Найти пользователя по реферальному коду.
+     *
+     * @param string $code
      * @return mixed|null
      */
-    public static function userByReferralCode($code)
+    public static function userByReferralCode(string $code): mixed
     {
-        $referrer = self::where('referral_code',$code)->first();
+        // Пытаемся найти реферал по коду в таблице referrals
+        $referrer = self::where('referral_code', $code)->first();
         if ($referrer) {
-            return App::make(config('referral.user_model'))->find($referrer->user_id);
+            // Если нашли, возвращаем пользователя, которого этот реферал пригласил
+            return User::find($referrer->user_id);
         }
-        return null;
-        
+        // Если не нашли в таблице referrals, ищем в таблице users
+        return User::where('referral_code', $code)->first();
     }
 }
+

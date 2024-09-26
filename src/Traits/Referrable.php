@@ -2,6 +2,8 @@
 
 namespace TLSGROUP\LaravelReferral\Traits;
 
+use App\Models\User;
+use Exception;
 use Illuminate\Support\Str;
 use TLSGROUP\LaravelReferral\Models\Referral;
 
@@ -32,7 +34,7 @@ trait Referrable
      *
      * @return bool
      */
-    public function hasReferralAccount()
+    public function hasReferralAccount(): bool
     {
         return !is_null($this->referralAccount);
     }
@@ -42,7 +44,7 @@ trait Referrable
      *
      * @return string
      */
-    public function getReferralLink()
+    public function getReferralLink(): string
     {
         if ($this->hasReferralAccount()) {
             return url('/') . "/" . config('referral.route_prefix') . "/" . $this->getReferralCode();
@@ -55,54 +57,86 @@ trait Referrable
      *
      * @return string|null
      */
-    public function getReferralCode()
+    public function getReferralCode(): ?string
     {
         if ($this->hasReferralAccount()) {
             return $this->referralAccount->referral_code;
         }
-        
         return null;
     }
 
     /**
-     * Create a referral account for the user.
+     * Создать реферальный аккаунт для пользователя, распределяя его по уровням.
      *
-     * @param  int|null  $referrerID
+     * @param int|null $referrerID
      * @return void
+     * @throws Exception
      */
-    public function createReferralAccount(int $referrerID = NULL)
+    public function createReferralAccount(int $referrerID = null): void
     {
+        // Начальный уровень — 1
+        $level = 1;
 
-        $prefix = config('referral.ref_code_prefix');
-        $length = config('referral.referral_length');
-        $referralCode = $this->generateUniqueReferralCode($prefix, $length);
+        // Ищем доступный слот для реферала
+        if ($referrerID) {
+            $availableSlot = Referral::findAvailableSlot($referrerID, $level);
 
-        $ref = new Referral;
-        $ref->user_id = $this->getKey();
-        $ref->referrer_id = $referrerID;
-        $ref->referral_code = $referralCode;
-        $ref->save();
+            // Если есть доступный слот, назначаем нового реферала
+            if ($availableSlot) {
+                $referrerID = $availableSlot;
+            } else {
+                // Если слотов нет, увеличиваем уровень и ищем слот на следующем уровне
+                $level++;
+                $referrerID = Referral::findAvailableSlot($referrerID, $level);
+            }
+        }
+
+        // Генерация реферального кода для текущего пользователя
+        $referralCode = $this->generateReferralCode();
+
+        // Создаем запись о реферале
+        Referral::create([
+            'user_id' => $this->id,
+            'referrer_id' => $referrerID,
+            'referral_code' => $referralCode,
+            'level' => $level,  // Устанавливаем уровень для реферала
+        ]);
     }
 
     /**
-     * Generate a unique referral code.
+     * Генерация реферального кода с использованием ref_id, имени и фамилии.
      *
-     * @param  string  $prefix
-     * @param  int  $length
      * @return string
+     * @throws Exception
      */
-    private function generateUniqueReferralCode($prefix, $length)
+    private function generateReferralCode(): string
     {
-        $prefix = strtolower($prefix);
-        // Generate an initial referral code
-        $code = $prefix . strtolower(Str::random($length));
+        $user = $this;
 
-        // Check if the generated code already exists in the database
-        while (Referral::where('referral_code', $code)->exists()) {
-            // If code already exists, generate a new one until a unique code is found
-            $code = $prefix . strtolower(Str::random($length));
+        // Если ref_id не установлен, генерируем следующий порядковый номер
+        if (!$user->ref_id) {
+            $maxRefId = User::max('ref_id'); // Находим максимальный существующий ref_id
+            $user->ref_id = $maxRefId ? $maxRefId + 1 : 1; // Устанавливаем следующий порядковый номер
         }
-        
-        return $code;
+
+        // Генерация инициалов пользователя (первая буква имени и фамилии)
+        $initials = strtoupper(substr($user->name, 0, 1) . substr($user->last_name, 0, 1));
+
+        // Префикс для реферального кода
+        $prefix = 'DTC';
+
+        // Генерация реферального кода с использованием префикса, инициалов и ref_id
+        $referralCode = $prefix . $initials . str_pad($user->ref_id, 2, '0', STR_PAD_LEFT);
+
+        // Проверка уникальности реферального кода
+        if (User::where('referral_code', $referralCode)->exists()) {
+            throw new Exception("Generated referral code already exists: $referralCode");
+        }
+
+        // Сохраняем изменения, если ref_id был изменён
+        $user->save();
+
+        return $referralCode;
     }
 }
+
