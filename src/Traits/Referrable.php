@@ -109,7 +109,7 @@ trait Referrable
      * @return string
      * @throws Exception
      */
-    private function generateReferralCode(): string
+    public function generateReferralCode(): string
     {
         $user = $this;
 
